@@ -402,7 +402,7 @@ def fxdecon(
         raise RuntimeError('number of traces must be >= 2')
     if not np.issubdtype(type(filter_len), np.integer):
         raise RuntimeError('filter_len must be an integer')
-    if not 1 <= filter_len < trace_window_len:
+    if not 1 <= filter_len <= trace_window_len//2:
         raise RuntimeError('filter_len must be in [1, trace_window_len//2]')
     if not np.issubdtype(type(trace_window_len), np.integer):
         raise RuntimeError('trace_window_len must be an integer')
