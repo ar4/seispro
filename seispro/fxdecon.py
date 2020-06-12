@@ -7,6 +7,7 @@ import numpy as np
 
 
 def _toeplitz(data_fx, filter_len):
+    # type: (Tensor, int) -> Tensor
     """Constructs a Toeplitz matrix corresponding to application of filter.
 
     Inputs:
@@ -20,7 +21,6 @@ def _toeplitz(data_fx, filter_len):
             [x_{trace_window_len-filter_len-1}, ..., x_{trace_window_len-2}]
         X: [-1, trace_window_len-filter_len, filter_len, 2]
     """
-    # type: (Tensor, int) -> Tensor
     batch_size, trace_window_len, _ = data_fx.shape
     # :-1 as the final trace in each trace window is not an input to any filter
     # The output of unfold is permuted as unfold outputs
@@ -43,12 +43,12 @@ def _toeplitz(data_fx, filter_len):
 
 
 def _wiener_denoise(data_fx, filter_len, final_trace_window_len):
+    # type: (Tensor, int, int) -> Tensor
     """Uses a prediction filter to estimate signal predictable from the left.
 
     data_fx: [batch_size, n_freqs, n_time_windows, n_trace_windows,
               trace_window_len, 2]
     """
-    # type: (Tensor, int, int) -> Tensor
     (
         batch_size,
         n_freqs,
@@ -70,13 +70,17 @@ def _wiener_denoise(data_fx, filter_len, final_trace_window_len):
     # to try to predict zero values will bias the filter).
     # I would like to do the following, but there is currently a bug that prevents
     # this from working (https://github.com/pytorch/pytorch/issues/38555)
-    #X.reshape(
+    # X.reshape(
     #    batch_size, n_freqs, n_time_windows, n_trace_windows, X.shape[-3], filter_len, 2
-    #)[:, :, :, -1, X.shape[-3] - (trace_window_len - final_trace_window_len):].fill_(0.0)
+    # )[:, :, :, -1, X.shape[-3] - (trace_window_len - final_trace_window_len):].fill_(0.0)
     # So instead reshape, zero the rows, and then undo the reshape
     Xshape = X.shape
     X = X.reshape(
-        batch_size * n_freqs * n_time_windows, n_trace_windows, X.shape[-3], filter_len, 2
+        batch_size * n_freqs * n_time_windows,
+        n_trace_windows,
+        X.shape[-3],
+        filter_len,
+        2,
     )
     X[:, -1, X.shape[-3] - (trace_window_len - final_trace_window_len) :, :, :] = 0.0
     X = X.reshape(Xshape[0], Xshape[1], Xshape[2], Xshape[3])
@@ -120,9 +124,11 @@ def _wiener_denoise(data_fx, filter_len, final_trace_window_len):
         torch.cat([g_re, g_im], dim=1),
         M + 1e-5 * torch.eye(2 * filter_len, device=device, dtype=dtype)[None],
     )
-    assert filt.shape == (batch_size2, 2 * filter_len, 1), "filt {}, expected {}".format(
-        filt.shape, (batch_size2, filter_len, 1)
-    )
+    assert filt.shape == (
+        batch_size2,
+        2 * filter_len,
+        1,
+    ), "filt {}, expected {}".format(filt.shape, (batch_size2, filter_len, 1))
     output = torch.zeros_like(desired_output)
     filt_re = filt[:, :filter_len]
     filt_im = filt[:, filter_len:]
@@ -143,16 +149,24 @@ def _wiener_denoise(data_fx, filter_len, final_trace_window_len):
 def _combine_trace_windows(
     data_fx_windowed, trace_window_starts, trace_window_len, filter_len, data_fx_shape
 ):
+    # type: (Tensor, Tensor, int, int, List[int]) -> Tuple[Tensor, Tensor]
     """Combines trace windows.
 
     Input data_fx_windowed: [batch_size, n_freqs, n_time_windows,
                              n_trace_windows, trace_window_len-filter_len, 2]
     Return data_fx: [batch_size, n_freqs, n_time_windows, n_traces, 2]
     """
-    # type: (Tensor, Tensor, int, int, List[int]) -> Tuple[Tensor, Tensor]
     dtype = data_fx_windowed.dtype
     device = data_fx_windowed.device
-    data_fx_combined = torch.zeros(data_fx_shape[0], data_fx_shape[1], data_fx_shape[2], data_fx_shape[3], data_fx_shape[4], device=device, dtype=dtype)
+    data_fx_combined = torch.zeros(
+        data_fx_shape[0],
+        data_fx_shape[1],
+        data_fx_shape[2],
+        data_fx_shape[3],
+        data_fx_shape[4],
+        device=device,
+        dtype=dtype,
+    )
     count = torch.zeros_like(data_fx_combined[..., 0])
     n_traces = data_fx_shape[-2]
     for trace_window_idx, trace_window_start in enumerate(trace_window_starts):
@@ -172,6 +186,7 @@ def _combine_trace_windows(
 
 
 def _extract_trace_windows(data_fx, trace_window_starts, trace_window_len):
+    # type: (Tensor, Tensor, int) -> Tuple[Tensor, int]
     """Extracts windows of traces from the data.
 
     Returns:
@@ -181,7 +196,6 @@ def _extract_trace_windows(data_fx, trace_window_starts, trace_window_len):
         final_trace_window_len: An integer specifying the number of traces
                                 in the final trace window
     """
-    # type: (Tensor, Tensor, int) -> Tuple[Tensor, int]
     n_trace_windows = len(trace_window_starts)
     batch_size, n_freqs, n_time_windows, n_traces, _ = data_fx.shape
     dtype = data_fx.dtype
@@ -213,6 +227,7 @@ def _extract_trace_windows(data_fx, trace_window_starts, trace_window_len):
 
 
 def _fxdecon_one_direction(data_fx, filter_len, trace_window_len):
+    # type: (Tensor, int, int) -> Tuple[Tensor, Tensor]
     """Applies FXDECON in one direction.
 
     This will create filters on windows of traces that use a
@@ -223,7 +238,6 @@ def _fxdecon_one_direction(data_fx, filter_len, trace_window_len):
     available for the prediction, so the first predicted trace
     is at index filter_len + 1.
     """
-    # type: (Tensor, int, int) -> Tuple[Tensor, Tensor]
     batch_size, n_freqs, n_time_windows, n_traces, _ = data_fx.shape
     trace_window_starts = torch.arange(
         0, n_traces - trace_window_len // 2, trace_window_len // 2
@@ -249,11 +263,13 @@ def _fxdecon_one_direction(data_fx, filter_len, trace_window_len):
 
 
 def _restore_freq_window(data_fx, data_fx_denoised, min_freq, max_freq):
+    # type: (Tensor, Tensor, float, float) -> Tensor
     """Replaces components between min and max freq with denoised values.
 
     Inputs:
         data_fx: [batch_size, n_freqs, n_time_windows, n_traces, 2]
-        data_fx_denoised: [batch_size, n_freqs*(max_freq-min_freq), n_time_windows, n_traces, 2]
+        data_fx_denoised: [batch_size, n_freqs*(max_freq-min_freq),
+                           n_time_windows, n_traces, 2]
         min_freq, max_freq: Floats specifying min and max Nyquist fractions
 
     Returns:
@@ -261,7 +277,6 @@ def _restore_freq_window(data_fx, data_fx_denoised, min_freq, max_freq):
                  values between min and max freq have been replaced by those
                  in data_fx_denoised.
     """
-    # type: (Tensor, Tensor, float, float) -> Tensor
     n_freqs = data_fx.shape[1]
     min_freq_idx = int(n_freqs * min_freq)
     max_freq_idx = int(n_freqs * max_freq)
@@ -270,6 +285,7 @@ def _restore_freq_window(data_fx, data_fx_denoised, min_freq, max_freq):
 
 
 def _extract_freq_window(data_fx, min_freq, max_freq):
+    # type: (Tensor, float, float) -> Tensor
     """Extracts components corresponding to frequencies between min and max.
 
     Inputs:
@@ -277,9 +293,9 @@ def _extract_freq_window(data_fx, min_freq, max_freq):
         min_freq, max_freq: Floats specifying min and max Nyquist fractions
 
     Returns:
-        data_fx_freq_windowed: [batch_size, n_freqs*(max_freq-min_freq), n_time_windows, n_traces, 2]
+        data_fx_freq_windowed: [batch_size, n_freqs*(max_freq-min_freq),
+                                n_time_windows, n_traces, 2]
     """
-    # type: (Tensor, float, float) -> Tensor
     n_freqs = data_fx.shape[1]
     min_freq_idx = int(n_freqs * min_freq)
     max_freq_idx = int(n_freqs * max_freq)
@@ -287,6 +303,7 @@ def _extract_freq_window(data_fx, min_freq, max_freq):
 
 
 def _inverse_fourier_transform_time(data_fx, time_window_len, n_times):
+    # type: (Tensor, int, int) -> Tensor
     """Inverse Fourier transforms in time and combines overlapping windows.
 
     Inputs:
@@ -302,7 +319,6 @@ def _inverse_fourier_transform_time(data_fx, time_window_len, n_times):
         data: A [batch_size, n_traces, n_times] shape Tensor containing the
               data after inverse Fourier transforming and combining windows
     """
-    # type: (Tensor, int, int) -> Tensor
     # [batch_size, n_freqs, n_time_windows, n_traces, 2]
     # -> [batch_size, n_traces, n_freqs, n_time_windows, 2]
     # -> [batch_size * n_traces, n_freqs, n_time_windows, 2]
@@ -314,12 +330,18 @@ def _inverse_fourier_transform_time(data_fx, time_window_len, n_times):
     time_window = torch.hann_window(time_window_len, dtype=dtype, device=device)
     data_fx = data_fx.permute(0, 3, 1, 2, 4)
     data_fx = data_fx.reshape(batch_size * n_traces, n_freqs, n_time_windows, 2)
-    data = torchaudio.functional.istft(data_fx, time_window_len, hop_length=time_window_len//2,
-                                       window=time_window, length=n_times)
+    data = torchaudio.functional.istft(
+        data_fx,
+        time_window_len,
+        hop_length=time_window_len // 2,
+        window=time_window,
+        length=n_times,
+    )
     return data.reshape(batch_size, n_traces, n_times)
 
 
 def _fourier_transform_time(data, time_window_len):
+    # type: (Tensor, int) -> Tensor
     """Windows and Fourier transforms the data in time.
 
     Inputs:
@@ -333,7 +355,6 @@ def _fourier_transform_time(data, time_window_len):
                  data
 
     """
-    # type: (Tensor, int) -> Tensor
     # Use the Short-Time Fourier Transform (STFT) to window data in time and
     # Fourier transform. This requires that the data is in 2D, with time
     # in the final dimension, so we need to combine the trace and batch
@@ -348,8 +369,12 @@ def _fourier_transform_time(data, time_window_len):
     dtype = data.dtype
     device = data.device
     time_window = torch.hann_window(time_window_len, dtype=dtype, device=device)
-    data_fx = torch.stft(data.reshape(-1, n_times), time_window_len,
-                         hop_length=time_window_len//2, window=time_window)
+    data_fx = torch.stft(
+        data.reshape(-1, n_times),
+        time_window_len,
+        hop_length=time_window_len // 2,
+        window=time_window,
+    )
     n_freqs, n_time_windows = data_fx.shape[1:3]
     data_fx = data_fx.reshape(batch_size, n_traces, n_freqs, n_time_windows, 2)
     data_fx = data_fx.permute(0, 2, 3, 1, 4)
@@ -364,9 +389,10 @@ def fxdecon(
     min_freq=0.0,
     max_freq=1.0,
 ):
+    # type: (Tensor, int, int, int, float, float) -> Tensor
     """Applies 2D FXDECON to attenuate random noise.
 
-    This process uses neighbouring traces to predict the frequency componen_timess
+    This process uses neighbouring traces to predict the frequency components
     of each trace. In this way, it attenuates unpredictable features in the
     data, which are assumed to be noise. The input data is windowed in the
     time and trace dimensions before the prediction filters are created.
@@ -377,9 +403,7 @@ def fxdecon(
     Inputs:
         data: A [batch_size, n_traces, n_times] shape Tensor containing the data
         filter_len: An integer specifying the length of the prediction
-                    filter. It should normally be in the range 3-11.
-                    Using a larger filter reduces noise attenuation
-                    but increases data fidelity. Default 4.
+                    filter. It should normally be in the range 3-11. Default 4.
         trace_window_len: An integer specifying the window length in the trace
                           dimension to use when calculating the autocorrelation.
                           It should normally be 3-4 times the value of
@@ -396,49 +420,45 @@ def fxdecon(
     Returns:
         data: A Tensor of the same shape as the input, after filtering.
     """
-    # type: (Tensor, int, int, int, float, float) -> Tensor
     batch_size, n_traces, n_times = data.shape
     if n_traces < 2:
-        raise RuntimeError('number of traces must be >= 2')
+        raise RuntimeError("number of traces must be >= 2")
     if not np.issubdtype(type(filter_len), np.integer):
-        raise RuntimeError('filter_len must be an integer')
-    if not 1 <= filter_len <= trace_window_len//2:
-        raise RuntimeError('filter_len must be in [1, trace_window_len//2]')
+        raise RuntimeError("filter_len must be an integer")
+    if not 1 <= filter_len <= trace_window_len // 2:
+        raise RuntimeError("filter_len must be in [1, trace_window_len//2]")
     if not np.issubdtype(type(trace_window_len), np.integer):
-        raise RuntimeError('trace_window_len must be an integer')
+        raise RuntimeError("trace_window_len must be an integer")
     if not 2 * filter_len <= trace_window_len <= n_traces:
-        raise RuntimeError('trace_window_len must be in [2*filter_len, n_traces]')
+        raise RuntimeError("trace_window_len must be in [2*filter_len, n_traces]")
     if not np.issubdtype(type(time_window_len), np.integer):
-        raise RuntimeError('time_window_len must be an integer')
+        raise RuntimeError("time_window_len must be an integer")
     if not 2 <= time_window_len <= n_times:
-        raise RuntimeError('time_window_len must be in [2, n_times]')
+        raise RuntimeError("time_window_len must be in [2, n_times]")
     if not 0.0 <= min_freq < 1.0:
-        raise RuntimeError('min_freq must be in [0.0, 1.0)')
+        raise RuntimeError("min_freq must be in [0.0, 1.0)")
     if not 0.0 < max_freq <= 1.0:
-        raise RuntimeError('max_freq must be in (0.0, 1.0]')
-    return fxdecon_jit(data, filter_len, trace_window_len, time_window_len, min_freq, max_freq)
+        raise RuntimeError("max_freq must be in (0.0, 1.0]")
+    return fxdecon_jit(
+        data, filter_len, trace_window_len, time_window_len, min_freq, max_freq
+    )
 
 
 @torch.jit.script
 def fxdecon_jit(
-    data,
-    filter_len,
-    trace_window_len,
-    time_window_len,
-    min_freq,
-    max_freq,
+    data, filter_len, trace_window_len, time_window_len, min_freq, max_freq,
 ):
+    # type: (Tensor, int, int, int, float, float) -> Tensor
     """JIT-compiled function without error checking.
 
     raise seems to not be supported by Torchscript, so error checking
     is done before calling this JIT-compiled function.
     """
-    # type: (Tensor, int, int, int, float, float) -> Tensor
     batch_size, n_traces, n_times = data.shape
     data_fx = _fourier_transform_time(data, time_window_len)
     data_fx_freq_windowed = _extract_freq_window(data_fx, min_freq, max_freq)
     data_fx_denoised = torch.zeros_like(data_fx_freq_windowed)
-    # count will store the number of estimates of each componen_times that have been
+    # count will store the number of estimates of each component that have been
     # summed, so dividing the sum of estimates by count gives the mean
     count = torch.zeros_like(data_fx_freq_windowed[..., 0])
 
@@ -469,4 +489,5 @@ def fxdecon_jit(
     )
 
     # Inverse Fourier transform in time
-    return _inverse_fourier_transform_time(data_fx_denoised, time_window_len, n_times)
+    return _inverse_fourier_transform_time(data_fx_denoised, time_window_len,
+                                           n_times)
