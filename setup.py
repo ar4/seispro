@@ -19,5 +19,6 @@ setuptools.setup(
         "Operating System :: OS Independent",
     ],
     python_requires='>=3.6',
-    install_requires=['torch'],
+    install_requires=['torch',
+                      'torchaudio'],
 )
