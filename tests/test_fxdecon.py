@@ -8,10 +8,10 @@ def run_fxdecon(data, filter_len, trace_window_len, time_window_len):
     batch_size, n_traces, n_times = data.shape
     if filter_len > n_traces or not (2*filter_len <= trace_window_len <= n_traces) or time_window_len > n_times:
         with pytest.raises(RuntimeError):
-            data_out = fxdecon.fxdecon(data, filter_len, trace_window_len,
+            data_out = fxdecon(data, filter_len, trace_window_len,
                                        time_window_len)
     else:
-        data_out = fxdecon.fxdecon(data, filter_len, trace_window_len,
+        data_out = fxdecon(data, filter_len, trace_window_len,
                                    time_window_len)
         mse = ((data - data_out)**2).mean()
         assert mse == approx(0.0, abs=1e-6)
