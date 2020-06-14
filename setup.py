@@ -5,7 +5,7 @@ with open("README.md", "r") as fh:
 
 setuptools.setup(
     name="seispro",
-    version="0.0.2",
+    version="0.0.3",
     author="Alan Richardson",
     author_email="alan@ausargeo.com",
     description="Seismic processing tools",
