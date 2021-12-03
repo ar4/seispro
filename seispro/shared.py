@@ -1,7 +1,6 @@
 """Functions shared between multiple tools."""
 
 import torch
-import torchaudio
 
 def complex_norm(complex_tensor):
     # type: (Tensor) -> Tensor
@@ -157,12 +156,13 @@ def inverse_fourier_transform_time(data_fx, time_window_len, n_times):
     time_window = torch.hann_window(time_window_len, dtype=dtype, device=device)
     data_fx = data_fx.permute(0, 3, 1, 2, 4)
     data_fx = data_fx.reshape(batch_size * n_traces, n_freqs, n_time_windows, 2)
-    data = torchaudio.functional.istft(
+    data = torch.istft(
         data_fx,
         time_window_len,
         hop_length=time_window_len // 2,
         window=time_window,
         length=n_times,
+        return_complex=False,
     )
     return data.reshape(batch_size, n_traces, n_times)
 
@@ -201,6 +201,7 @@ def fourier_transform_time(data, time_window_len):
         time_window_len,
         hop_length=time_window_len // 2,
         window=time_window,
+        return_complex=False,
     )
     n_freqs, n_time_windows = data_fx.shape[1:3]
     data_fx = data_fx.reshape(batch_size, n_traces, n_freqs, n_time_windows, 2)

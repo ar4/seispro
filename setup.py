@@ -5,7 +5,7 @@ with open("README.md", "r") as fh:
 
 setuptools.setup(
     name="seispro",
-    version="0.0.3",
+    version="0.0.4",
     author="Alan Richardson",
     author_email="alan@ausargeo.com",
     description="Seismic processing tools",
@@ -19,7 +19,6 @@ setuptools.setup(
         "Operating System :: OS Independent",
     ],
     python_requires='>=3.6',
-    install_requires=['torch',
-                      'torchaudio',
+    install_requires=['torch>=1.9.0',
                       'numpy'],
 )

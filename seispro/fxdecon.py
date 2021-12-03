@@ -120,9 +120,9 @@ def _wiener_denoise(data_fx, filter_len, final_trace_window_len):
         + XH[..., 0] @ desired_output[..., 1, None]
     )
     # A small value is added to the diagonal of M for stability
-    filt, _ = torch.solve(
-        torch.cat([g_re, g_im], dim=1),
+    filt = torch.linalg.solve(
         M + 1e-5 * torch.eye(2 * filter_len, device=device, dtype=dtype)[None],
+        torch.cat([g_re, g_im], dim=1),
     )
     assert filt.shape == (
         batch_size2,
